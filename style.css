@@ -1,6 +1,6 @@
 :root{--bg:#eef3f6;--surface:#fff;--ink:#132a3a;--muted:#546a79;--line:#cddae2;--accent:#0b6e75;--on-accent:#fff;--bead:#d98a0b;--good:#1c7c45;--bad:#b4303b;
   --gold:#f2c14e;--silver:#cfd8dd;--bronze:#d9a07a;--on-medal:#2b1d05;
-  --display:"Reem Kufi","Tajawal",Tahoma,sans-serif;--body:"Tajawal",Tahoma,Arial,sans-serif}
+  --display:"Noto Sans Arabic",Tahoma,Arial,sans-serif;--body:"Noto Sans Arabic",Tahoma,Arial,sans-serif}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1d24;--surface:#172a33;--ink:#e8f1f3;--muted:#9db3bc;--line:#2c444f;--accent:#4cc3c4;--on-accent:#07181c;--bead:#f0ad3c;--good:#62d393;--bad:#ff8b91;color-scheme:dark}}
 :root[data-theme="dark"]{--bg:#0f1d24;--surface:#172a33;--ink:#e8f1f3;--muted:#9db3bc;--line:#2c444f;--accent:#4cc3c4;--on-accent:#07181c;--bead:#f0ad3c;--good:#62d393;--bad:#ff8b91;color-scheme:dark}
 *{box-sizing:border-box}
@@ -11,7 +11,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:500 17px/1.7 var(--body
 header.top{display:flex;flex-direction:column;gap:8px;margin-bottom:18px}
 .brand{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-weight:700}
 .brand b{font-family:var(--display)}
-nav{display:grid;grid-template-columns:repeat(5,1fr);gap:4px}
+nav{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
 nav a{display:grid;place-items:center;min-height:44px;text-align:center;font-size:.9rem;line-height:1.3;border-radius:8px;border:2px solid var(--line);background:var(--surface);color:var(--ink);text-decoration:none}
 nav a[aria-current]{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:700}
 #view{display:flex;flex-direction:column;gap:16px}
@@ -80,3 +80,22 @@ th,td{border-bottom:1px solid var(--line);padding:6px;text-align:start}th{color:
 .op{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;border-bottom:1px solid var(--line);padding-block:6px;font-size:.95rem}
 .op .ask{font-size:1rem}.op.ok>span:last-child{color:var(--good)}.op.ko>span:last-child{color:var(--bad)}
 .gift{align-items:center;text-align:center}.gift .icon{font-size:2.6rem;filter:grayscale(1);opacity:.6}.gift.on{border-color:var(--bead)}.gift.on .icon{filter:none;opacity:1}
+.stack{display:flex;flex-direction:column;gap:16px}
+.group{border:0;margin:0;padding:0;min-width:0}.group legend{font-weight:700;margin-bottom:6px;padding:0}
+.group .choices{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:8px}
+.group .choices label{position:relative}
+.group .choices input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer;width:100%;height:100%}
+.group .choices span{display:grid;place-items:center;min-height:50px;padding:4px;border:2px solid var(--line);border-radius:10px;background:var(--surface);text-align:center}
+.group .choices input:checked+span{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:700}
+.group .choices input:focus-visible+span{outline:3px solid var(--bead);outline-offset:2px}
+.group .choices.ops span{font-size:1.8rem;line-height:1}
+.tile.free{border-color:var(--accent)}.tile.free b{font-size:1.25rem}
+.tools{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:6px;display:flex;justify-content:space-between;gap:8px}
+.tools button{min-height:44px;min-width:96px;border-color:var(--accent);color:var(--accent)}
+.tools #exit{color:var(--bad);border-color:var(--bad);margin-inline-start:auto}
+.group .choices.five,.group .choices.four{gap:5px}.group .choices.five span,.group .choices.four span{font-size:.92rem}
+.group .choices.three{grid-auto-flow:row;grid-template-columns:repeat(3,1fr)}
+.picks{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.pick{display:flex;flex-direction:column;font-weight:700;font-size:.9rem;min-width:0}
+select{font:inherit;color:inherit;background:var(--bg);border:2px solid var(--line);border-radius:10px;min-height:48px;padding:4px;width:100%}
+.cheer{display:block;color:var(--accent);font-size:1.15rem}
+.big-start{font-size:1.2rem;min-height:56px}
