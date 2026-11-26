@@ -13,6 +13,8 @@ const SAY = {
   great: [["ممتاز يا {n}!"], ["رائع يا {n}!"]],
   good: [["جيد يا {n}، اقتربت من التميز"], ["عمل جيد يا {n}"]],
   keep: [["واصل يا {n}، التدريب يصنع الفرق", "واصلي يا {n}، التدريب يصنع الفرق"]],
+  fixed: [["صحيح بعد التصحيح يا {n}"], ["أحسنت التصحيح يا {n}", "أحسنتِ التصحيح يا {n}"]],
+  party: [["تصفيق حار لك يا {n}!"], ["أبدعت يا {n}!", "أبدعتِ يا {n}!"], ["نجاح كبير يا {n}!"]],
   calm: [["لا تقلق يا {n}، كل بطل بدأ هكذا", "لا تقلقي يا {n}، كل بطلة بدأت هكذا"], ["لا بأس يا {n}، جرّب مستوى أسهل ثم تقدم", "لا بأس يا {n}، جرّبي مستوى أسهل ثم تقدمي"]]
 };
 const COIN = "أوقية ذهبية";
@@ -186,21 +188,38 @@ function start(skill, cfg, free) {
   clearTimers();
   const timed = cfg.len[0] === "t", duration = timed ? Number(cfg.len.slice(1)) : 0;
   game = { skill, cfg, level: cfg.level, timed, duration, limit: cfg.len[0] === "q" ? Number(cfg.len.slice(1)) : 0, free: free || null, score: 0, streak: 0, missed: [],
-    pid: db.current, n: 0, right: 0, secs: 0, coins: 0, hints: 0, left: duration * 1000, tick: 0, q: null, last: "", result: null };
+    pid: db.current, n: 0, right: 0, fixed: 0, clean: 0, secs: 0, coins: 0, hints: 0, left: duration * 1000, tick: 0, q: null, last: "", result: null };
   go("#play");
 }
 function pagePlay() {
   const s = game.skill, g = game;
-  const info = h("p", { class: "muted", "aria-live": "off" }), card = h("div", { class: "card" }), pad = h("div", { class: "pad" }), extra = h("div", { class: "actions" });
+  const toast = h("p", { class: "toast", "aria-live": "polite" });
+  const info = h("p", { class: "muted info", "aria-live": "off" }), card = h("div", { class: "card" }), pad = h("div", { class: "pad" }), extra = h("div", { class: "actions" });
   const rod = g.timed ? h("div", { class: "rod", "aria-hidden": "true" }, Array.from({ length: 30 }, () => h("i"))) : null;
-  g.ui = { info, card, pad, extra, rod };
+  g.ui = { info, card, pad, extra, rod, toast };
   if (g.timed) g.tick = setInterval(() => {
     if (g.waiting || !g.since) return;
     const now = Date.now(); g.left -= now - g.since; g.since = now; paintClock();
     if (g.left <= 0) finish();
   }, 200);
   later(nextQuestion, 0);
-  return [h("h1", { class: "small-title" }, tr(s.title) + (g.free ? "" : " · " + LEVELS[g.level])), info, rod, card, pad, extra, h("button", { type: "button", class: "quiet", onclick: finish }, "إنهاء الجولة")];
+  return [h("div", { class: "play-top" }, h("h1", { class: "small-title" }, tr(s.title) + (g.free ? "" : " · " + LEVELS[g.level])), info, rod, toast, card),
+    h("div", { class: "play-keys" }, pad, extra)];
+}
+// نصغّر خط العملية حتى تظهر كاملة داخل البطاقة دون تمرير
+function fit(min) {
+  const c = game && game.ui && game.ui.card; if (!c || !c.isConnected) return;
+  game.fitMin = min;
+  let k = 1; c.style.setProperty("--fs", k);
+  while (k > min && (c.scrollHeight > c.clientHeight + 1 || c.scrollWidth > c.clientWidth + 1)) { k -= .04; c.style.setProperty("--fs", k.toFixed(2)); }
+  c.scrollTop = 0;
+}
+window.addEventListener("resize", () => { if (game && !game.result && game.fitMin) fit(game.fitMin); });
+// يبقى التشجيع ظاهراً مدة تكفي لقراءته، حتى بعد ظهور السؤال التالي
+function showToast(text) {
+  const g = game, el = g.ui.toast;
+  clearTimeout(g.toastTimer); el.textContent = text; el.classList.toggle("on", !!text);
+  if (text) g.toastTimer = later(() => { el.textContent = ""; el.classList.remove("on"); }, 4500);
 }
 function paintClock() {
   const g = game, sec = Math.max(0, Math.ceil(g.left / 1000));
@@ -212,11 +231,11 @@ function nextQuestion() {
   const g = game; if (!g) return;
   if (g.limit && g.n >= g.limit) return finish();
   let q, k = 0; do { q = g.skill.gen(g.level, g.cfg.flash); } while (JSON.stringify([q.q, q.ask]) === g.last && ++k < 20);
-  g.last = JSON.stringify([q.q, q.ask]); g.q = q; g.typed = ""; g.hint = false; g.locked = true; g.since = 0; g.waiting = false;
+  g.last = JSON.stringify([q.q, q.ask]); g.q = q; g.typed = ""; g.hint = false; g.retried = false; g.locked = true; g.since = 0; g.waiting = false;
   paintClock(); g.ui.pad.replaceChildren(); g.ui.extra.replaceChildren(); g.ui.card.className = "card";
   if (q.flash) {
     const screen = h("div", { class: "flash" }, "استعد"), step = q.speed * 1000, shown = step - Math.max(70, step * .2);
-    g.ui.card.replaceChildren(screen);
+    g.ui.card.replaceChildren(screen); fit(.4);
     q.flash.forEach((v, i) => { later(() => { screen.textContent = num(v); }, 900 + i * step); later(() => { screen.textContent = ""; }, 900 + i * step + shown); });
     later(() => ready(h("div", { class: "ask" }, h("strong", {}, "ما المجموع؟"))), 900 + q.flash.length * step);
   } else ready(questionView(q));
@@ -230,66 +249,132 @@ function ready(view) {
   if (q.choices) { g.ui.pad.className = "pad choices"; g.ui.pad.replaceChildren(...q.choices.map(c => h("button", { type: "button", onclick: () => judge(c) }, c))); }
   else {
     g.ui.pad.className = "pad";
-    g.ui.pad.replaceChildren(...(g.free ? ["1", "2", "3", "4", "5", "6", "7", "8", "9", "del", "0", "ok"] : ["1", "2", "3", "4", "5", "6", "7", "8", "9", ",", "0", "del", "ok"]).map(k =>
-      h("button", { type: "button", class: k === "ok" ? (g.free ? "primary" : "primary wide") : "", "aria-label": k === "del" ? "امسح" : k === "," ? "الفاصلة" : false, onclick: () => press(k) },
-        k === "del" ? "⌫" : k === "ok" ? (g.free ? "✓" : "تأكيد الجواب") : k === "," ? (eastern() ? "٫" : ",") : tr(k))));
+    g.ui.pad.replaceChildren(...["1", "2", "3", "4", "5", "6", "7", "8", "9", ...(g.free ? ["del", "0", "ok"] : [",", "0", "del"])].map(k =>
+      h("button", { type: "button", class: k === "ok" ? "primary" : "", "aria-label": k === "del" ? "امسح" : k === "," ? "الفاصلة" : k === "ok" ? "تأكيد" : false, onclick: () => press(k) },
+        k === "del" ? "⌫" : k === "ok" ? "✓" : k === "," ? (eastern() ? "٫" : ",") : tr(k))));
   }
-  if (g.free) { g.ui.extra.replaceChildren(h("button", { type: "button", onclick: () => judge(null) }, "تخطَّ السؤال")); return; }
-  g.ui.extra.replaceChildren(h("button", { type: "button", onclick: e => { if (g.locked) return; g.hint = true; e.currentTarget.disabled = true;
-    g.ui.hint.replaceChildren(q.steps.length > 1 ? stepsView(q.steps, 1) : h("p", { class: "rule" }, tr(g.skill.rule))); } }, "تلميح"),
-    h("button", { type: "button", onclick: () => judge(null) }, "لا أعرف"));
+  main.classList.toggle("tall", !!(q.column && q.column.length > 5));
+  if (g.free) g.ui.extra.replaceChildren(h("button", { type: "button", onclick: () => judge(null) }, "تخطَّ السؤال"));
+  else g.ui.extra.replaceChildren(...[h("button", { type: "button", onclick: e => { if (g.locked) return; g.hint = true; e.currentTarget.disabled = true;
+    g.ui.hint.replaceChildren(q.steps.length > 1 ? stepsView(q.steps, 1) : h("p", { class: "rule" }, tr(g.skill.rule))); fit(.55); } }, "تلميح"),
+    h("button", { type: "button", onclick: () => judge(null) }, "لا أعرف"),
+    q.choices ? null : h("button", { type: "button", class: "primary confirm", onclick: () => press("ok") }, "تأكيد")].filter(Boolean));
+  fit(.4);
 }
+const digitCount = v => String(v).replace(/\D/g, "").length;
+const typedValue = g => g.q.big ? g.typed.replace(/^0+(?=\d)/, "") : Number(g.typed.replace(",", "."));
+const isRight = (q, v) => v !== null && (typeof q.a === "number" ? Math.abs(v - q.a) < 1e-9 : v === q.a);
 function press(k) {
   const g = game; if (!g || g.locked || g.q.choices) return;
-  if (k === "ok") { if (/\d/.test(g.typed)) judge(g.q.big ? g.typed.replace(/^0+(?=\d)/, "") : Number(g.typed.replace(",", "."))); return; }
-  if (k === "del") g.typed = g.typed.slice(0, -1);
+  if (k === "ok") { if (/\d/.test(g.typed)) judge(typedValue(g)); return; }
+  if (k === "del") {
+    // مسح جواب مكتمل وخاطئ يعني محاولة ثانية
+    if (digitCount(g.typed) >= digitCount(g.q.a)) g.retried = true;
+    g.typed = g.typed.slice(0, -1);
+  }
   else if (k === ",") { if (!g.typed.includes(",")) g.typed += g.typed ? "," : "0,"; }
   else if (g.typed.length < 20) g.typed += k;
-  g.ui.answer.textContent = num(g.typed);
-  if (g.free && k !== "del" && g.typed === String(g.q.a)) judge(g.q.a);
+  g.ui.answer.textContent = num(g.typed.replace(",", "."));
+  fit(.4);
+  // الجواب الصحيح يُقبل فوراً دون تأكيد
+  if (k !== "del" && /\d/.test(g.typed) && isRight(g.q, typedValue(g))) judge(typedValue(g));
 }
 function judge(given) {
   const g = game; if (!g || g.locked) return;
   const p = db.profiles[g.pid], q = g.q, s = g.skill;
   g.locked = true;
   const secs = Math.max(.1, (Date.now() - g.started) / 1000);
-  const ok = given !== null && (typeof q.a === "number" ? Math.abs(given - q.a) < 1e-9 : given === q.a);
+  const ok = isRight(q, given), fixed = ok && !g.free && g.retried;
   const L = g.level, quick = secs <= targetOf(s, L);
   g.n++; g.secs += secs; if (g.hint) g.hints++;
   let coins = 0;
   if (ok) {
-    g.right++; p.totals.streak++; p.totals.bestStreak = Math.max(p.totals.bestStreak, p.totals.streak);
-    coins = g.hint ? 1 : L * 2 + s.level - 1 + (quick ? L : 0);
-    p.xp += g.hint ? 1 : L * 2;
+    g.right++; if (fixed) g.fixed++; if (!g.hint && !fixed) g.clean++;
+    p.totals.streak = fixed ? 0 : p.totals.streak + 1; p.totals.bestStreak = Math.max(p.totals.bestStreak, p.totals.streak);
+    coins = g.hint || fixed ? 1 : L * 2 + s.level - 1 + (quick ? L : 0);
+    p.xp += g.hint || fixed ? 1 : L * 2;
   } else p.totals.streak = 0;
   if (g.free) {
     if (ok) { g.streak++; g.score += L + (g.streak % 5 === 0 ? 5 : 0); }
     else { g.streak = 0; g.missed.push({ q: q.q, a: q.a, g: given }); }
   }
   g.coins += coins; p.coins += coins; p.totals.total++; if (ok) p.totals.right++;
-  p.ops.unshift({ t: Date.now(), s: s.id, lv: L, q: q.q, ask: q.ask || "", a: q.a, g: given, ok, sec: Math.round(secs * 10) / 10 });
+  p.ops.unshift({ t: Date.now(), s: s.id, lv: L, q: q.q, ask: q.ask || "", a: q.a, g: given, ok, fix: fixed || undefined, sec: Math.round(secs * 10) / 10 });
   p.ops.length = Math.min(p.ops.length, 300);
   save();
   g.ui.card.className = "card " + (ok ? "right" : "wrong");
-  const run = p.totals.streak, cheer = ok ? say(run && run % 5 === 0 ? "streak" : quick && !g.hint ? "fast" : "ok", p, run) : say("wrong", p);
-  g.ui.feedback.textContent = ok ? cheer + " +" + num(coins) + " " + COIN : "";
+  const run = p.totals.streak, cheer = ok ? say(fixed ? "fixed" : run && run % 5 === 0 ? "streak" : quick && !g.hint ? "fast" : "ok", p, run) : say("wrong", p);
+  showToast(ok ? cheer + " +" + num(coins) + " " + COIN : "");
   paintClock();
   g.ui.extra.replaceChildren();
-  if (ok) { later(nextQuestion, g.free ? 750 : 1200); return; }
-  if (g.free) { g.ui.feedback.replaceChildren(h("span", { class: "cheer" }, cheer), "الجواب الصحيح: ", h("bdi", {}, answerText(q.a))); later(nextQuestion, 2200); return; }
-  g.waiting = true;
+  const move = () => { if (game === g && g.q === q) nextQuestion(); };
+  if (ok) { later(move, 700); return; }
+  g.waiting = true; // يتوقف الوقت أثناء قراءة التصحيح
   g.ui.feedback.replaceChildren(h("span", { class: "cheer" }, cheer), "الجواب الصحيح: ", h("bdi", {}, answerText(q.a)));
+  g.ui.pad.replaceChildren();
+  const b = h("button", { type: "button", class: "primary", onclick: move }, g.free ? "التالي" : "فهمت، التالي");
+  g.ui.extra.append(b); b.focus({ preventScroll: true });
+  if (g.free) { later(move, 4500); fit(.6); return; }
   if (q.flash) g.ui.card.prepend(math(questionTokens(q), "long"));
   g.ui.hint.replaceChildren(stepsView(q.steps));
-  g.ui.pad.replaceChildren();
-  const b = h("button", { type: "button", class: "primary", onclick: nextQuestion }, "فهمت، التالي");
-  g.ui.extra.append(b); b.focus({ preventScroll: true });
+  fit(.75);
 }
 // سجل المهارة، مع نقل السجلات القديمة إلى المستوى المتوسط
 function statOf(p, id) {
   const st = p.skills[id] || (p.skills[id] = { right: 0, total: 0, medal: 0, by: {} });
   if (!st.by) { st.by = {}; if (st.bestAvg) st.by[2] = { medal: st.medal, bestAvg: st.bestAvg, bestAcc: st.bestAcc }; }
   return st;
+}
+// النجاح الكبير: 8 أسئلة على الأقل، و90% منها صحيحة من أول محاولة ودون تلميح
+const party = (p, g) => g.n >= 8 && g.clean / g.n >= .9 ? say("party", p) : null;
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+let audio = null, clapping = null, claps = 0;
+function wake() { if (!AudioCtx) return; try { audio = audio || new AudioCtx(); if (audio.state === "suspended") audio.resume(); } catch (e) {} }
+["pointerdown", "keydown"].forEach(t => document.addEventListener(t, wake, true));
+// صوت التصفيق يولّده الجهاز نفسه: يعمل دون إنترنت ودون ملفات صوتية
+function applauseSamples(rate) {
+  const length = Math.floor(rate * 3.5), out = new Float32Array(length), burst = Math.floor(rate * .035);
+  for (let hand = 0; hand < 18; hand++) {
+    const w = 2 * Math.PI * (700 + Math.random() * 1800) / rate, alpha = Math.sin(w) / 2.4, a0 = 1 + alpha, a1 = -2 * Math.cos(w), a2 = 1 - alpha;
+    const period = .2 + Math.random() * .13, loud = .35 + Math.random() * .65;
+    for (let t = Math.random() * .3; t < 3.45; t += period * (.85 + Math.random() * .3)) {
+      const from = Math.floor(t * rate); let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+      for (let i = 0; i < burst && from + i < length; i++) {
+        const x = (Math.random() * 2 - 1) * Math.exp(-i / (rate * .006)), y = (alpha * x - alpha * x2 - a1 * y1 - a2 * y2) / a0;
+        x2 = x1; x1 = x; y2 = y1; y1 = y; out[from + i] += y * loud;
+      }
+    }
+  }
+  let peak = 0;
+  for (let i = 0; i < length; i++) { const t = i / rate; out[i] *= Math.min(1, t / .25) * (t > 2.4 ? Math.max(0, (3.5 - t) / 1.1) : 1); peak = Math.max(peak, Math.abs(out[i])); }
+  for (let i = 0; i < length; i++) out[i] *= .9 / (peak || 1);
+  return out;
+}
+function hush() { if (clapping) { try { clapping.stop(); } catch (e) {} clapping = null; } }
+function applause(p) {
+  hush(); if (!p || p.sound === false) return;
+  wake(); if (!audio) return;
+  try {
+    const data = applauseSamples(audio.sampleRate), buffer = audio.createBuffer(1, data.length, audio.sampleRate);
+    buffer.getChannelData(0).set(data);
+    clapping = audio.createBufferSource(); clapping.buffer = buffer; clapping.connect(audio.destination); clapping.start(); claps++;
+  } catch (e) {}
+}
+// بطاقة التشجيع تبقى حتى يضغط التلميذ «متابعة»
+function celebrate(g) {
+  const r = g.result, p = db.profiles[g.pid];
+  if (!r.party || r.seen) return null;
+  const sound = h("button", { type: "button", class: "quiet", onclick: () => { p.sound = p.sound === false; save(); label(); if (p.sound) applause(p); else hush(); } });
+  const label = () => { sound.textContent = p.sound === false ? "شغّل صوت التصفيق" : "أوقف صوت التصفيق"; };
+  const done = h("button", { type: "button", class: "primary", onclick: () => { r.seen = true; hush(); box.remove(); } }, "متابعة");
+  const box = h("div", { class: "party", role: "dialog", "aria-modal": "true", "aria-labelledby": "party-title" },
+    h("div", { class: "party-box" }, h("div", { class: "hands", "aria-hidden": "true" }, "👏👏👏"), h("h2", { id: "party-title" }, r.party),
+      h("p", {}, "إجابات صحيحة: " + num(g.right) + " من " + num(g.n)),
+      r.medal ? h("p", {}, medalDot(r.medal), " ميدالية هذه الجولة") : null,
+      r.note ? h("p", {}, r.note) : null,
+      h("p", { class: "coins" }, "+" + num(g.coins) + " " + COIN), done, sound));
+  label(); applause(p); later(() => done.focus({ preventScroll: true }), 60);
+  return box;
 }
 const headline = (p, acc) => say(acc >= .9 ? "great" : acc >= .7 ? "good" : acc >= .5 ? "keep" : "calm", p);
 // اقتراح الخطوة التالية في التدرج
@@ -310,7 +395,8 @@ function finish() {
   const p = db.profiles[g.pid], s = g.skill;
   if (!g.n) { game = null; go(g.free ? "#classic" : "#s-" + s.id); return; }
   if (g.free) return finishFree();
-  const acc = g.right / g.n, avg = Math.round(g.secs / g.n * 10) / 10;
+  // الدقة المعتمدة للميداليات: الصحيح من المحاولة الأولى
+  const acc = (g.right - g.fixed) / g.n, avg = Math.round(g.secs / g.n * 10) / 10;
   const st = statOf(p, s.id), L = g.level, target = targetOf(s, L);
   const best = st.by[L] || (st.by[L] = { medal: 0, bestAvg: 0, bestAcc: 0 });
   const notes = [];
@@ -325,16 +411,17 @@ function finish() {
     if (medal > best.medal) { best.medal = medal; bonus += medal * 5 * L; notes.push("ميدالية " + MEDALS[medal] + " جديدة في مستوى " + LEVELS[L]); }
     st.medal = Math.max(st.medal, medal);
   } else notes.push("أكمل 10 أسئلة لتنافس على ميدالية");
+  if (g.fixed) notes.push("أجوبة صححتها: " + g.fixed + ". الميدالية تُحسب بالمحاولة الأولى");
   st.right += g.right; st.total += g.n;
   p.coins += bonus; g.coins += bonus;
   const fresh = closeSession(p, { t: Date.now(), s: s.id, lv: L, n: g.n, right: g.right, avg, medal, coins: g.coins, timed: g.timed });
-  g.result = { acc, avg, medal, notes, fresh, head: headline(p, acc), next: advice(s, g, acc, avg, target) };
+  g.result = { acc, avg, medal, notes, fresh, head: headline(p, acc), party: party(p, g), next: advice(s, g, acc, avg, target) };
   go("#result");
 }
 function pageResult() {
   const g = game, r = g.result, s = g.skill;
   const follow = () => { const p = me(); p.cfg[s.id] = r.next.cfg; save(); start(s, r.next.cfg); };
-  return [h("h1", {}, r.head), h("p", { class: "muted" }, tr(s.title) + " · " + LEVELS[g.level]),
+  return [celebrate(g), h("h1", {}, r.head), h("p", { class: "muted" }, tr(s.title) + " · " + LEVELS[g.level]),
     h("div", { class: "stats panel" }, stat(num(g.right) + " / " + num(g.n), "صحيحة"), stat(num(r.avg), "ثانية للسؤال"), stat("+" + num(g.coins), COIN)),
     r.medal ? h("p", { class: "award" }, medalDot(r.medal), " نلت ميدالية هذه الجولة") : null,
     r.notes.length ? h("ul", { class: "notes" }, r.notes.map(n => h("li", {}, tr(n)))) : null,
@@ -382,7 +469,7 @@ function finishFree() {
   }
   if (g.n >= ROUND) { p.totals.rounds++; if (acc === 1) p.totals.perfect++; }
   const fresh = closeSession(p, { t: Date.now(), s: s.id, lv: g.level, n: g.n, right: g.right, avg, medal: 0, coins: g.coins, timed: g.timed });
-  g.result = { acc, avg, note, fresh, head: headline(p, acc) };
+  g.result = { acc, avg, note, fresh, head: headline(p, acc), party: party(p, g) };
   go("#result");
 }
 function closeSession(p, session) {
@@ -396,7 +483,7 @@ function closeSession(p, session) {
 const badgeNews = list => list.map(b => h("p", { class: "award" }, h("span", { class: "badge" }, "وسام جديد"), " " + tr(b[1]) + ": " + tr(b[2])));
 function pageFreeResult() {
   const g = game, r = g.result;
-  return [h("h1", {}, r.head), h("p", { class: "muted" }, "التحدي الحر · " + LEVELS[g.level]), r.note ? h("p", { class: "muted" }, r.note) : null,
+  return [celebrate(g), h("h1", {}, r.head), h("p", { class: "muted" }, "التحدي الحر · " + LEVELS[g.level]), r.note ? h("p", { class: "muted" }, r.note) : null,
     h("div", { class: "stats panel" }, stat(num(g.score), "النقاط"), stat(num(g.right) + " / " + num(g.n), "صحيحة"), stat(num(Math.round(r.acc * 100)) + (eastern() ? "٪" : "%"), "الدقة")),
     h("p", { class: "award" }, "ربحت " + num(g.coins) + " " + COIN), badgeNews(r.fresh),
     h("p", {}, g.missed.length ? "راجع هذه العمليات:" : "لا أخطاء في هذه الجولة."),
@@ -426,17 +513,17 @@ function pageMe() {
     h("div", { class: "stats panel" }, stat(num(t.right) + " / " + num(t.total), "إجابات صحيحة"), stat(t.total ? num(Math.round(t.right / t.total * 100)) + pct : "—", "الدقة"), stat(num(t.bestStreak), "أطول سلسلة")),
     h("form", { class: "panel", onsubmit: e => e.preventDefault(), onchange: e => {
         const f = new FormData(e.currentTarget);
-        p.girl = f.get("girl") === "f";
+        p.girl = f.get("girl") === "f"; p.sound = f.get("sound") !== "off";
         // المستوى الجديد يطبَّق على كل الصفحات
         if (e.target.name === "level") { p.startLevel = Number(f.get("level")); Object.values(p.cfg || {}).forEach(c => { c.level = p.startLevel; delete c.flash; }); if (p.freeCfg) p.freeCfg.level = p.startLevel; }
         save();
-      } }, h("h2", {}, "إعداداتي"), group("مستواي في كل الصفحات", "five", [1, 2, 3, 4, 5].map(l => choice("radio", "level", l, LEVELS[l], (p.startLevel || 1) === l))), girlGroup(p.girl), digitsGroup(p, () => render())),
+      } }, h("h2", {}, "إعداداتي"), group("مستواي في كل الصفحات", "five", [1, 2, 3, 4, 5].map(l => choice("radio", "level", l, LEVELS[l], (p.startLevel || 1) === l))), girlGroup(p.girl), group("صوت التصفيق", "", [["on", "مسموع"], ["off", "صامت"]].map(([v, l]) => choice("radio", "sound", v, l, (v === "off") === (p.sound === false)))), digitsGroup(p, () => render())),
     h("h2", {}, "ميدالياتي"), medals.length ? h("div", { class: "list" }, medals.map(([id, s]) => h("a", { class: "row-link", href: "#s-" + id }, h("b", {}, tr(byId(id).title)), medalDot(...topMedal(s))))) : h("p", { class: "muted" }, "أكمل جولة من 10 أسئلة بدقة " + tr("70%") + " لتنال أول ميدالية."),
     h("h2", {}, "أوسمتي"), h("div", { class: "grid badges" }, BADGES.map(b => h("div", { class: "badge-card" + (p.badges[b[0]] ? " on" : "") }, h("b", {}, tr(b[1])), h("small", {}, tr(b[2])), h("small", {}, p.badges[b[0]] ? "محصَّل" : "لم يُحصَّل بعد")))),
     h("h2", {}, "جولاتي الأخيرة"), p.sessions.length ? h("div", { class: "scroll" }, h("table", {}, h("thead", {}, h("tr", {}, ["التاريخ", "الفنية", "النتيجة", "ثانية", "المكافأة"].map(x => h("th", {}, x)))),
       h("tbody", {}, p.sessions.slice(0, 20).map(x => h("tr", {}, h("td", {}, h("bdi", {}, tr(when(x.t)))), h("td", {}, tr((byId(x.s) || {}).title || x.s) + (x.lv ? " · " + LEVELS[x.lv] : "")), h("td", {}, num(x.right) + " / " + num(x.n)), h("td", {}, num(x.avg)), h("td", {}, num(x.coins))))))) : h("p", { class: "muted" }, "لا جولات بعد."),
     h("h2", {}, "سجل عملياتي"), p.ops.length ? h("div", { class: "list ops" }, p.ops.slice(0, 60).map(o => h("div", { class: "op " + (o.ok ? "ok" : "ko") },
-      questionView({ q: o.q, ask: o.ask }, true), h("span", {}, (o.ok ? "✓ " : "✗ ") + (o.g === null ? "لم أعرف" : "جوابي: " + answerText(o.g)) + (o.ok ? "" : " · الصحيح: " + answerText(o.a)) + " · " + num(o.sec) + " ث")))) : h("p", { class: "muted" }, "ستظهر هنا كل عملية تحلها."),
+      questionView({ q: o.q, ask: o.ask }, true), h("span", {}, (o.ok ? (o.fix ? "✓ بعد تصحيح · " : "✓ ") : "✗ ") + (o.g === null ? "لم أعرف" : "جوابي: " + answerText(o.g)) + (o.ok ? "" : " · الصحيح: " + answerText(o.a)) + " · " + num(o.sec) + " ث")))) : h("p", { class: "muted" }, "ستظهر هنا كل عملية تحلها."),
     h("details", { class: "panel" }, h("summary", {}, "نسخة احتياطية ونقل الحساب"), h("p", { class: "muted small" }, "انسخ النص واحفظه، أو الصقه على جهاز آخر ثم اضغط استرجاع. الاسترجاع يستبدل الحساب الذي يحمل الاسم نفسه."), backup,
       h("div", { class: "actions" }, h("button", { type: "button", onclick: () => { backup.value = JSON.stringify(p); backup.select(); const fail = () => { msg.textContent = "حُدّد النص، انسخه يدوياً."; };
         if (navigator.clipboard) navigator.clipboard.writeText(backup.value).then(() => { msg.textContent = "نُسخت."; }, fail); else fail(); } }, "انسخ حسابي"), h("button", { type: "button", onclick: restore }, "استرجاع")), msg),
@@ -471,6 +558,7 @@ function parentOf(hash) {
   return hash === "home" || hash === "" ? "#students" : "#home";
 }
 document.getElementById("back").addEventListener("click", () => go(parentOf(location.hash.slice(1))));
+document.getElementById("end").addEventListener("click", () => finish());
 document.getElementById("exit").addEventListener("click", () => {
   clearTimers();
   if (game && !game.result && game.n) finishSilently();
@@ -490,7 +578,7 @@ function pageBye() {
 
 /* ---------- التوجيه ---------- */
 function render() {
-  clearTimers();
+  clearTimers(); hush();
   let hash = location.hash.slice(1) || "home";
   if (game && hash !== "play" && hash !== "result") { if (!game.result && game.n) { finishSilently(); } game = null; }
   if (!me() && hash !== "install" && hash !== "bye") hash = "students";
@@ -508,6 +596,10 @@ function render() {
   else if (hash.startsWith("cat-") && CATS.some(c => "cat-" + c.id === hash)) page = pageCat(CATS.find(c => "cat-" + c.id === hash));
   else if (hash.startsWith("s-") && SKILLS.some(s => s.id === hash.slice(2))) page = pageSkill(byId(hash.slice(2)));
   else page = pageHome();
+  const playing = hash === "play" && !!game && !game.result;
+  document.body.classList.toggle("playing", playing);
+  document.getElementById("end").hidden = !playing;
+  main.classList.remove("tall");
   main.replaceChildren(...page.flat(Infinity).filter(Boolean));
   if (!storageOk) main.prepend(h("p", { class: "error" }, "المتصفح يمنع الحفظ: لن يبقى سجلك بعد إغلاق الصفحة."));
   who.textContent = me() ? me().name + " · " + num(me().coins) : "";
@@ -538,5 +630,8 @@ document.addEventListener("keydown", e => {
 });
 if (document.querySelector('link[rel="manifest"]') && "serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js").catch(() => {});
 window.__game = () => game;
+window.__claps = () => claps;
+window.__applause = applauseSamples;
+if (document.fonts) document.fonts.ready.then(() => { if (game && !game.result && game.fitMin) fit(game.fitMin); });
 render();
 })();
